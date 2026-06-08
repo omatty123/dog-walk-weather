@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dog Walk Window — Appleton, WI</title>
+  <link rel="icon" href="charlie-icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sky:    #7ec8e3;
+      --sky-lt: #d6eef8;
+      --grass:  #e8f5ec;
+      --white:  #ffffff;
+      --text-1: #1a3828;
+      --text-2: #5a7a68;
+      --text-3: #a8c4b4;
+      --shadow: rgba(26, 56, 40, 0.10);
+      --red:    #ef4444;
+      --yellow: #fbbf24;
+      --green:  #22c55e;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: 'Nunito', sans-serif;
+      background: linear-gradient(175deg, var(--sky) 0%, var(--sky-lt) 28%, var(--grass) 100%);
+      color: var(--text-1);
+      padding-bottom: 72px;
+    }
+
+    header {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px 16px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-icon {
+      width: 44px; height: 44px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      object-fit: cover;
+      object-position: center 40%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    }
+
+    .header-text .title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      line-height: 1;
+      color: var(--text-1);
+    }
+
+    .header-text .subtitle {
+      margin-top: 3px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+
+    main {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 4px 16px;
+    }
+
+    .msg { padding: 40px 0; font-size: 15px; color: var(--text-2); font-weight: 500; }
+    .msg.error { color: var(--red); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: translateY(14px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .card {
+      background: var(--white);
+      border-radius: 12px;
+      box-shadow: 0 3px 16px var(--shadow);
+      overflow: hidden;
+      aspect-ratio: 1;
+      animation: popIn 0.35s ease-out both;
+    }
+    .card:has(.hours-panel.open) { aspect-ratio: auto; }
+
+    /* Top stripe */
+    .card-stripe { height: 4px; flex-shrink: 0; }
+    .red    .card-stripe { background: var(--red); }
+    .yellow .card-stripe { background: var(--yellow); }
+    .green  .card-stripe { background: var(--green); }
+
+    .card-body {
+      height: calc(100% - 4px);
+      display: flex; flex-direction: column;
+      justify-content: space-between;
+      align-items: center; text-align: center;
+      padding: 7px 8px 9px;
+    }
+    .today   .card-body { background: #fffdf5; }
+    .yellow  .card-body { background: #fffbeb; }
+
+    .card-meta {
+      width: 100%; display: flex;
+      align-items: center; justify-content: space-between;
+    }
+
+    .date-label {
+      font-size: 17px; font-weight: 800;
+      letter-spacing: 0.01em;
+      color: var(--text-1);
+    }
+
+    .badge {
+      font-size: 8px; font-weight: 700;
+      letter-spacing: 0.05em; text-transform: uppercase;
+      background: #fef3c7; color: #92400e;
+      border: 1px solid #fde68a;
+      padding: 1px 4px; border-radius: 20px;
+    }
+
+    .walk-time {
+      font-size: 13px;
+      font-weight: 800; letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    .red    .walk-time { color: var(--red); }
+    .yellow .walk-time { color: #1c1917; }
+    .green  .walk-time { color: #15803d; }
+
+    .daily-high {
+      font-size: 10px; font-weight: 600;
+      color: var(--text-2);
+    }
+    .daily-high strong { color: var(--text-1); }
+
+    .card-actions { display: flex; align-items: center; justify-content: center; gap: 10px; }
+
+    .card-toggle {
+      background: none; border: none;
+      border-bottom: 1px solid #d1e8da;
+      padding: 0 0 1px;
+      font-family: inherit; font-size: 9px; font-weight: 700;
+      color: var(--text-3); cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .card-toggle:hover { color: var(--text-2); border-color: var(--text-2); }
+
+    .forecast-link {
+      font-size: 9px; font-weight: 700;
+      color: var(--text-3); text-decoration: none;
+      border-bottom: 1px solid #d1e8da; padding-bottom: 1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .forecast-link:hover { color: var(--text-2); border-color: var(--text-2); }
+
+    /* Hourly panel */
+    .hours-panel { display: none; margin-top: 12px; border-top: 1px solid #e4ede8; padding-top: 8px; }
+    .hours-panel.open { display: block; }
+
+    .hours-section-label {
+      font-size: 9px; font-weight: 800;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-3); padding: 4px 6px 2px;
+    }
+    .hours-section-label a {
+      color: inherit; text-decoration: underline;
+      text-decoration-color: var(--text-3);
+      text-underline-offset: 2px;
+    }
+    .hours-section-label a:hover { color: var(--text-2); }
+
+    .src-link {
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 0.05em; text-transform: uppercase;
+      color: var(--text-3); text-decoration: none;
+      border-bottom: 1px dotted var(--text-3);
+    }
+    .src-link:hover { color: var(--text-2); }
+    .hours-section-label + .hours-section-label,
+    .hours-divider { height: 1px; background: #e4ede8; margin: 4px 0; }
+
+    .hour-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 2px 6px; border-radius: 5px;
+      font-size: 12px; font-weight: 600; color: var(--text-2);
+    }
+    .hour-time { min-width: 68px; }
+    .hour-temp { color: var(--text-1); }
+
+    .hour-marker {
+      font-size: 10px; font-weight: 800;
+      letter-spacing: 0.03em;
+      padding: 1px 7px; border-radius: 10px; margin-left: auto;
+    }
+
+    .red    .hour-row.crossing { background: #fee2e2; }
+    .red    .hour-row.crossing .hour-temp   { color: var(--red); }
+    .red    .hour-row.crossing .hour-marker { background: var(--red);    color: #fff; }
+
+    .yellow .hour-row.crossing { background: #fef9c3; }
+    .yellow .hour-row.crossing .hour-temp   { color: #92400e; }
+    .yellow .hour-row.crossing .hour-marker { background: var(--yellow); color: #1c1917; }
+
+    .green  .hour-row.crossing { background: #dcfce7; }
+    .green  .hour-row.crossing .hour-temp   { color: #15803d; }
+    .green  .hour-row.crossing .hour-marker { background: var(--green);  color: #fff; }
+
+    footer {
+      max-width: 600px; margin: 20px auto 0;
+      padding: 0 16px; font-size: 11px;
+      color: var(--text-3); font-weight: 600;
+    }
+
+    @media (min-width: 500px) {
+      .grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (min-width: 700px) {
+      .grid { grid-template-columns: repeat(5, 1fr); }
+      main, header, footer { max-width: 800px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="charlie.jpg" alt="Charlie" class="header-icon">
+    <div class="header-text">
+      <div class="title">Dog Walk Window</div>
+      <div class="subtitle">Appleton, WI &bull; Beat the 73&deg;F heat</div>
+    </div>
+  </header>
+
+  <main>
+    <div id="content"><div class="msg">Loading forecast&hellip;</div></div>
+  </main>
+
+  <footer>
+    Appleton forecast &bull; KATW observed temps &bull; Refreshes on load
+  </footer>
+
+  <script>
+    const NWS_POINTS  = 'https://api.weather.gov/points/44.2619,-88.4154';
+    const NWS_OBS     = 'https://api.weather.gov/stations/KATW/observations?limit=30';
+    const NWS_HEADERS = { 'User-Agent': 'DogWalkWindow (omatty@gmail.com)' };
+    const THRESHOLD   = 73;
+    const TZ          = 'America/Chicago';
+    const NWS_PAGE    = 'https://forecast.weather.gov/MapClick.php?CityName=Appleton&state=WI&site=GRB&textField1=44.2619&textField2=-88.4154';
+    const KATW_PAGE   = 'https://www.wunderground.com/airport/KATW';
+
+    function toChicago(ts) {
+      const d    = new Date(ts);
+      const date = d.toLocaleDateString('en-CA', { timeZone: TZ });
+      const hr   = parseInt(
+        Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: TZ }).format(d), 10
+      );
+      return { date, hour: hr === 24 ? 0 : hr };
+    }
+
+    async function init() {
+      try {
+        const [pRes, obsRes] = await Promise.all([
+          fetch(NWS_POINTS, { headers: NWS_HEADERS }),
+          fetch(NWS_OBS,    { headers: NWS_HEADERS })
+        ]);
+        if (!pRes.ok)   throw new Error(`NWS points: ${pRes.status}`);
+        if (!obsRes.ok) throw new Error(`NWS obs: ${obsRes.status}`);
+
+        const pData   = await pRes.json();
+        const hourlyUrl = pData.properties.forecastHourly;
+        const dailyUrl  = hourlyUrl.replace('/forecast/hourly', '/forecast');
+
+        const [hRes, dRes, obsData] = await Promise.all([
+          fetch(hourlyUrl, { headers: NWS_HEADERS }),
+          fetch(dailyUrl,  { headers: NWS_HEADERS }),
+          obsRes.json()
+        ]);
+        if (!hRes.ok) throw new Error(`NWS hourly: ${hRes.status}`);
+        if (!dRes.ok) throw new Error(`NWS daily: ${dRes.status}`);
+
+        render(await hRes.json(), await dRes.json(), obsData);
+      } catch (e) {
+        document.getElementById('content').innerHTML =
+          `<div class="msg error">Could not load forecast: ${e.message}</div>`;
+      }
+    }
+
+    function render(hourlyData, dailyData, obsData) {
+      const byDate = {};
+
+      // Hourly forecast
+      hourlyData.properties.periods.forEach(p => {
+        const { date, hour } = toChicago(p.startTime);
+        (byDate[date] = byDate[date] || {})[hour] = { temp: p.temperature, src: 'forecast' };
+      });
+
+      // KATW observations (UTC, Celsius) — overwrite forecast for same hour
+      obsData.features.forEach(f => {
+        const tc = f.properties?.temperature?.value;
+        if (tc == null) return;
+        const tf = Math.round(tc * 9 / 5 + 32);
+        const { date, hour } = toChicago(f.properties.timestamp);
+        if (!byDate[date]) byDate[date] = {};
+        byDate[date][hour] = { temp: tf, src: 'observed' };
+      });
+
+      // Daily highs from NWS daily forecast (daytime periods only)
+      const dailyHigh = {};
+      dailyData.properties.periods.forEach(p => {
+        if (!p.isDaytime) return;
+        const { date } = toChicago(p.startTime);
+        dailyHigh[date] = p.temperature;
+      });
+
+      const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ });
+      const year     = todayStr.slice(0, 4);
+
+      const cards = Object.keys(byDate)
+        .sort()
+        .filter(d => d >= todayStr && d <= `${year}-08-31`)
+        .map((date, idx) => {
+          const hours = Object.keys(byDate[date])
+            .map(Number).sort((a, b) => a - b)
+            .map(h => ({ hour: h, temp: byDate[date][h].temp, src: byDate[date][h].src }));
+          const crossing = morningCrossing(hours);
+          return { date, hours, crossing, high: dailyHigh[date] ?? null, isToday: date === todayStr, idx };
+        });
+
+      if (!cards.length) {
+        document.getElementById('content').innerHTML =
+          '<div class="msg">No summer forecast data available yet.</div>';
+        return;
+      }
+
+      document.getElementById('content').innerHTML =
+        `<div class="grid">${cards.map(cardHTML).join('')}</div>`;
+    }
+
+    // Find overnight low, then first crossing of THRESHOLD on the way up.
+    function morningCrossing(hours) {
+      if (!hours.length) return null;
+      let minIdx = 0;
+      for (let i = 1; i < hours.length; i++) {
+        if (hours[i].temp < hours[minIdx].temp) minIdx = i;
+      }
+      for (let i = minIdx; i < hours.length; i++) {
+        if (hours[i].temp >= THRESHOLD) return hours[i];
+      }
+      return null;
+    }
+
+    // RED    — crosses 73°F at or before 9 AM (must go earlier than normal 9 AM walk)
+    // YELLOW — crosses 73°F at 10 AM (normal 9 AM walk is fine, just don't push later)
+    // GREEN  — crosses 73°F at 11 AM or later, or not at all (no constraint)
+    function cardInfo(crossing) {
+      if (crossing && crossing.hour <= 9) {
+        return { cls: 'red', label: `GET OUT BY ${fmtHour(crossing.hour)}` };
+      }
+      if (crossing && crossing.hour < 11) {
+        return { cls: 'yellow', label: `Walk by ${fmtHour(crossing.hour)}` };
+      }
+      return { cls: 'green', label: 'OK!' };
+    }
+
+    function fmtHour(h) {
+      if (h === 0)  return '12:00 AM';
+      if (h < 12)   return `${h}:00 AM`;
+      if (h === 12) return '12:00 PM';
+      return `${h - 12}:00 PM`;
+    }
+
+    function fmtDate(dateStr) {
+      const d   = new Date(dateStr + 'T12:00:00');
+      const day = d.toLocaleDateString('en-US', { weekday: 'short', timeZone: TZ }).toUpperCase();
+      const num = d.toLocaleDateString('en-US', { day: 'numeric', timeZone: TZ });
+      return `${day} ${num}`;
+    }
+
+    function toggleHours(date) {
+      const panel = document.querySelector(`[data-date="${date}"] .hours-panel`);
+      const btn   = document.querySelector(`[data-date="${date}"] .card-toggle`);
+      const open  = panel.classList.toggle('open');
+      btn.textContent = open ? 'hide' : 'by hour';
+    }
+
+    function cardHTML({ date, hours, crossing, high, isToday, idx }) {
+      const { cls, label } = cardInfo(crossing);
+      const badge   = isToday ? '<span class="badge">Today</span>' : '';
+      const highTxt = high != null ? `<div class="daily-high">High ${high}&deg;</div>` : '';
+      const wuUrl   = `https://www.wunderground.com/hourly/us/wi/appleton/date/${date}`;
+
+      // Build hourly rows with section labels for observed vs forecast
+      let lastSrc = null;
+      const rows = hours.map(({ hour, temp, src }) => {
+        const hit = crossing && hour === crossing.hour;
+        let header = '';
+        if (src !== lastSrc) {
+          if (lastSrc !== null) header += '<div class="hours-divider"></div>';
+          const srcUrl   = src === 'observed' ? KATW_PAGE : NWS_PAGE;
+          const srcLabel = src === 'observed' ? 'Observed — KATW Airport station' : 'Forecast — NWS Appleton';
+          header += `<div class="hours-section-label"><a href="${srcUrl}" target="_blank" rel="noopener">${srcLabel}</a></div>`;
+          lastSrc = src;
+        }
+        return header + `<div class="hour-row${hit ? ' crossing' : ''}">
+          <span class="hour-time">${fmtHour(hour)}</span>
+          <span class="hour-temp">${temp}&deg;F</span>
+          ${hit ? '<span class="hour-marker">73&deg;</span>' : ''}
+        </div>`;
+      }).join('');
+
+      return `
+        <div class="card ${cls}${isToday ? ' today' : ''}" data-date="${date}" style="animation-delay:${idx * 45}ms">
+          <div class="card-stripe"></div>
+          <div class="card-body">
+            <div class="card-meta">
+              <span class="date-label">${fmtDate(date)}</span>
+              ${badge}
+            </div>
+            <div class="walk-time">${label}</div>
+            ${highTxt}
+            <div class="card-actions">
+              <button class="card-toggle" onclick="toggleHours('${date}')">by hour</button>
+              <a class="forecast-link" href="${wuUrl}" target="_blank" rel="noopener">WU</a>
+            </div>
+            <div class="hours-panel">${rows}</div>
+          </div>
+        </div>`;
+    }
+
+    init();
+  </script>
+</body>
+</html>

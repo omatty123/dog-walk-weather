@@ -67,10 +67,10 @@
     }
 
     .header-text .subtitle {
-      margin-top: 3px;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-2);
+      margin-top: 4px;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text-1);
     }
 
     main {
@@ -233,14 +233,39 @@
       .grid { grid-template-columns: repeat(5, 1fr); }
       main, header, footer { max-width: 800px; }
     }
+
+    /* Location search bar */
+    .title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .loc-form { display: flex; gap: 5px; }
+    .loc-input {
+      font-family: inherit; font-size: 12px; font-weight: 600;
+      width: 110px; padding: 4px 8px;
+      border: 2px solid #d1e8da; border-radius: 7px;
+      background: white; color: var(--text-1); outline: none;
+    }
+    .loc-input:focus { border-color: #6ee7b7; }
+    .loc-go, .loc-gps {
+      font-family: inherit; font-size: 11px; font-weight: 800;
+      padding: 4px 10px; border: none; border-radius: 7px;
+      background: var(--text-1); color: white; cursor: pointer;
+    }
+    .loc-go:hover, .loc-gps:hover { opacity: 0.82; }
+    .loc-gps { padding: 4px 8px; font-size: 14px; line-height: 1; }
   </style>
 </head>
 <body>
   <header>
     <img src="charlie.jpg" alt="Charlie" class="header-icon">
     <div class="header-text">
-      <div class="title">Dog Walk Window</div>
-      <div class="subtitle">Appleton, WI &bull; Beat the 73&deg;F heat</div>
+      <div class="title-row">
+        <div class="title">Dog Walk Window</div>
+        <form class="loc-form" id="loc-form" onsubmit="handleSearch(event)">
+          <input class="loc-input" id="loc-input" type="text" placeholder="ZIP or city" autocomplete="off">
+          <button class="loc-go" type="submit">Go</button>
+          <button class="loc-gps" type="button" onclick="geolocate()" title="Use my location">&#x25CE;</button>
+        </form>
+      </div>
+      <div class="subtitle" id="subtitle">Loading&hellip;</div>
     </div>
   </header>
 
@@ -248,20 +273,22 @@
     <div id="content"><div class="msg">Loading forecast&hellip;</div></div>
   </main>
 
-  <footer>
-    Appleton forecast &bull; KATW observed temps &bull; Refreshes on load
+  <footer id="footer">
+    US locations only &bull; NWS forecast + airport observations &bull; Refreshes on load
   </footer>
 
   <script>
-    const NWS_POINTS  = 'https://api.weather.gov/points/44.2619,-88.4154';
-    const NWS_OBS     = 'https://api.weather.gov/stations/KATW/observations?limit=30';
-    const NWS_HEADERS = { 'User-Agent': 'DogWalkWindow (omatty@gmail.com)' };
-    const THRESHOLD   = 73;
-    const TZ          = 'America/Chicago';
-    const NWS_PAGE    = 'https://forecast.weather.gov/MapClick.php?CityName=Appleton&state=WI&site=GRB&textField1=44.2619&textField2=-88.4154';
-    const KATW_PAGE   = 'https://www.wunderground.com/airport/KATW';
+    const NWS_HEADERS   = { 'User-Agent': 'DogWalkWindow (omatty@gmail.com)' };
+    const NOM_HEADERS   = { 'User-Agent': 'DogWalkWindow/1.0 (omatty@gmail.com)' };
+    const THRESHOLD     = 73;
+    const DEFAULT_QUERY = '54911';
+    const STORE_KEY     = 'dogwalk-v2-location'; // new key clears stale data
+    let TZ          = 'America/Chicago';
+    let nwsPage     = '';
+    let stationPage = '';
+    let wuZip       = '';
 
-    function toChicago(ts) {
+    function toLocal(ts) {
       const d    = new Date(ts);
       const date = d.toLocaleDateString('en-CA', { timeZone: TZ });
       const hr   = parseInt(
@@ -270,58 +297,144 @@
       return { date, hour: hr === 24 ? 0 : hr };
     }
 
-    async function init() {
+    async function handleSearch(e) {
+      e.preventDefault();
+      const q = document.getElementById('loc-input').value.trim();
+      if (!q) return;
+      localStorage.setItem(STORE_KEY, q);
+      await loadQuery(q);
+    }
+
+    function geolocate() {
+      if (!navigator.geolocation) return;
+      document.getElementById('content').innerHTML = '<div class="msg">Detecting your location&hellip;</div>';
+      navigator.geolocation.getCurrentPosition(
+        async pos => {
+          try {
+            const { latitude: lat, longitude: lon } = pos.coords;
+            const r = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`,
+              { headers: NOM_HEADERS }
+            );
+            const d    = await r.json();
+            const addr = d.address;
+            const city = addr.city || addr.town || addr.village || addr.hamlet || 'Your Location';
+            const st   = addr.state_code || addr['ISO3166-2-lvl4']?.split('-')[1] || '';
+            const q    = `${city}, ${st}`;
+            localStorage.setItem(STORE_KEY, q);
+            document.getElementById('loc-input').value = q;
+            await loadQuery(q);
+          } catch {
+            loadQuery(DEFAULT_QUERY);
+          }
+        },
+        () => loadQuery(DEFAULT_QUERY),
+        { timeout: 8000 }
+      );
+    }
+
+    async function geocode(query) {
+      if (/^\d{5}$/.test(query)) {
+        // ZIP code path
+        const r = await fetch(`https://api.zippopotam.us/us/${query}`);
+        if (!r.ok) throw new Error('ZIP code not found.');
+        const d = await r.json();
+        return {
+          lat:  parseFloat(d.places[0].latitude).toFixed(4),
+          lon:  parseFloat(d.places[0].longitude).toFixed(4),
+          city: d.places[0]['place name'],
+          st:   d.places[0]['state abbreviation'],
+          zip:  query
+        };
+      } else {
+        // City name path via Nominatim
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=us&format=json&limit=1&addressdetails=1`;
+        const r = await fetch(url, { headers: NOM_HEADERS });
+        if (!r.ok) throw new Error('Could not search for that location.');
+        const results = await r.json();
+        if (!results.length) throw new Error(`No US location found for "${query}".`);
+        const place = results[0];
+        const addr  = place.address;
+        const city  = addr.city || addr.town || addr.village || addr.hamlet || query;
+        const st    = addr.state_code || addr['ISO3166-2-lvl4']?.split('-')[1] || '';
+        return {
+          lat:  parseFloat(place.lat).toFixed(4),
+          lon:  parseFloat(place.lon).toFixed(4),
+          city,
+          st,
+          zip:  null
+        };
+      }
+    }
+
+    async function loadQuery(query) {
+      document.getElementById('content').innerHTML = '<div class="msg">Loading forecast&hellip;</div>';
       try {
-        const [pRes, obsRes] = await Promise.all([
-          fetch(NWS_POINTS, { headers: NWS_HEADERS }),
-          fetch(NWS_OBS,    { headers: NWS_HEADERS })
-        ]);
-        if (!pRes.ok)   throw new Error(`NWS points: ${pRes.status}`);
-        if (!obsRes.ok) throw new Error(`NWS obs: ${obsRes.status}`);
+        const { lat, lon, city, st, zip } = await geocode(query);
 
-        const pData   = await pRes.json();
-        const hourlyUrl = pData.properties.forecastHourly;
-        const dailyUrl  = hourlyUrl.replace('/forecast/hourly', '/forecast');
+        document.getElementById('subtitle').innerHTML = `${city}, ${st}`;
+        document.getElementById('footer').innerHTML   =
+          `${city}, ${st} &bull; NWS forecast + nearby station &bull; Refreshes on load`;
+        wuZip = zip || query;
 
-        const [hRes, dRes, obsData] = await Promise.all([
+        const pRes = await fetch(
+          `https://api.weather.gov/points/${lat},${lon}`, { headers: NWS_HEADERS });
+        if (!pRes.ok) throw new Error('NWS doesn\'t cover this location. Try a nearby city or ZIP.');
+        const pData = await pRes.json();
+
+        TZ      = pData.properties.timeZone;
+        nwsPage = `https://forecast.weather.gov/MapClick.php?CityName=${encodeURIComponent(city)}&state=${st}&textField1=${lat}&textField2=${lon}`;
+
+        const hourlyUrl   = pData.properties.forecastHourly;
+        const dailyUrl    = hourlyUrl.replace('/forecast/hourly', '/forecast');
+        const stationsUrl = pData.properties.observationStations;
+
+        const stRes     = await fetch(stationsUrl, { headers: NWS_HEADERS });
+        const stData    = stRes.ok ? await stRes.json() : { features: [] };
+        const stationId = stData.features[0]?.properties?.stationIdentifier ?? null;
+        stationPage     = stationId ? `https://www.wunderground.com/airport/${stationId}` : nwsPage;
+        const obsUrl    = stationId
+          ? `https://api.weather.gov/stations/${stationId}/observations?limit=30`
+          : null;
+
+        const fetches = [
           fetch(hourlyUrl, { headers: NWS_HEADERS }),
           fetch(dailyUrl,  { headers: NWS_HEADERS }),
-          obsRes.json()
-        ]);
+          ...(obsUrl ? [fetch(obsUrl, { headers: NWS_HEADERS })] : [])
+        ];
+        const [hRes, dRes, obsRes] = await Promise.all(fetches);
         if (!hRes.ok) throw new Error(`NWS hourly: ${hRes.status}`);
         if (!dRes.ok) throw new Error(`NWS daily: ${dRes.status}`);
+        const obsData = obsRes ? await obsRes.json() : { features: [] };
 
         render(await hRes.json(), await dRes.json(), obsData);
-      } catch (e) {
+      } catch (err) {
         document.getElementById('content').innerHTML =
-          `<div class="msg error">Could not load forecast: ${e.message}</div>`;
+          `<div class="msg error">${err.message}</div>`;
       }
     }
 
     function render(hourlyData, dailyData, obsData) {
       const byDate = {};
 
-      // Hourly forecast
       hourlyData.properties.periods.forEach(p => {
-        const { date, hour } = toChicago(p.startTime);
+        const { date, hour } = toLocal(p.startTime);
         (byDate[date] = byDate[date] || {})[hour] = { temp: p.temperature, src: 'forecast' };
       });
 
-      // KATW observations (UTC, Celsius) — overwrite forecast for same hour
       obsData.features.forEach(f => {
         const tc = f.properties?.temperature?.value;
         if (tc == null) return;
         const tf = Math.round(tc * 9 / 5 + 32);
-        const { date, hour } = toChicago(f.properties.timestamp);
+        const { date, hour } = toLocal(f.properties.timestamp);
         if (!byDate[date]) byDate[date] = {};
         byDate[date][hour] = { temp: tf, src: 'observed' };
       });
 
-      // Daily highs from NWS daily forecast (daytime periods only)
       const dailyHigh = {};
       dailyData.properties.periods.forEach(p => {
         if (!p.isDaytime) return;
-        const { date } = toChicago(p.startTime);
+        const { date } = toLocal(p.startTime);
         dailyHigh[date] = p.temperature;
       });
 
@@ -341,7 +454,7 @@
 
       if (!cards.length) {
         document.getElementById('content').innerHTML =
-          '<div class="msg">No summer forecast data available yet.</div>';
+          '<div class="msg">No summer forecast data yet.</div>';
         return;
       }
 
@@ -349,7 +462,6 @@
         `<div class="grid">${cards.map(cardHTML).join('')}</div>`;
     }
 
-    // Find overnight low, then first crossing of THRESHOLD on the way up.
     function morningCrossing(hours) {
       if (!hours.length) return null;
       let minIdx = 0;
@@ -362,16 +474,11 @@
       return null;
     }
 
-    // RED    — crosses 73°F at or before 9 AM (must go earlier than normal 9 AM walk)
-    // YELLOW — crosses 73°F at 10 AM (normal 9 AM walk is fine, just don't push later)
-    // GREEN  — crosses 73°F at 11 AM or later, or not at all (no constraint)
     function cardInfo(crossing) {
-      if (crossing && crossing.hour <= 9) {
-        return { cls: 'red', label: `GET OUT BY<br><span class="time">${fmtHour(crossing.hour).replace(' AM', '')}</span>` };
-      }
-      if (crossing && crossing.hour < 11) {
+      if (crossing && crossing.hour <= 9)
+        return { cls: 'red',    label: `GET OUT BY<br><span class="time">${fmtHour(crossing.hour).replace(' AM', '')}</span>` };
+      if (crossing && crossing.hour < 11)
         return { cls: 'yellow', label: `GET OUT BY<br><span class="time">${fmtHour(crossing.hour).replace(' AM', '')}</span>` };
-      }
       return { cls: 'green', label: 'OK!' };
     }
 
@@ -400,17 +507,16 @@
       const { cls, label } = cardInfo(crossing);
       const badge   = isToday ? '<span class="badge">Today</span>' : '';
       const highTxt = high != null ? `<div class="daily-high">${high}&deg;</div>` : '';
-      const wuUrl   = `https://www.wunderground.com/hourly/us/wi/appleton/date/${date}`;
+      const wuUrl   = `https://www.wunderground.com/forecast/us/${wuZip}`;
 
-      // Build hourly rows with section labels for observed vs forecast
       let lastSrc = null;
       const rows = hours.map(({ hour, temp, src }) => {
         const hit = crossing && hour === crossing.hour;
         let header = '';
         if (src !== lastSrc) {
           if (lastSrc !== null) header += '<div class="hours-divider"></div>';
-          const srcUrl   = src === 'observed' ? KATW_PAGE : NWS_PAGE;
-          const srcLabel = src === 'observed' ? 'Observed — KATW Airport station' : 'Forecast — NWS Appleton';
+          const srcUrl   = src === 'observed' ? stationPage : nwsPage;
+          const srcLabel = src === 'observed' ? 'Observed (nearest station)' : 'Forecast (NWS)';
           header += `<div class="hours-section-label"><a href="${srcUrl}" target="_blank" rel="noopener">${srcLabel}</a></div>`;
           lastSrc = src;
         }
@@ -440,7 +546,41 @@
         </div>`;
     }
 
-    init();
+    // Boot — default Appleton, override with saved query
+    // Boot: saved location → geolocation (first visit only) → Appleton default
+    const saved = localStorage.getItem(STORE_KEY);
+    if (saved) {
+      document.getElementById('loc-input').value = saved;
+      loadQuery(saved);
+    } else {
+      // First visit: try geolocation, fall back to Appleton
+      if (navigator.geolocation) {
+        document.getElementById('content').innerHTML = '<div class="msg">Detecting your location&hellip;</div>';
+        navigator.geolocation.getCurrentPosition(
+          async pos => {
+            try {
+              const { latitude: lat, longitude: lon } = pos.coords;
+              const r = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`,
+                { headers: NOM_HEADERS }
+              );
+              const d    = await r.json();
+              const addr = d.address;
+              const city = addr.city || addr.town || addr.village || addr.hamlet || 'Your Location';
+              const st   = addr.state_code || addr['ISO3166-2-lvl4']?.split('-')[1] || '';
+              const q    = `${city}, ${st}`;
+              localStorage.setItem(STORE_KEY, q);
+              document.getElementById('loc-input').value = q;
+              loadQuery(q);
+            } catch { loadQuery(DEFAULT_QUERY); }
+          },
+          () => loadQuery(DEFAULT_QUERY),
+          { timeout: 8000 }
+        );
+      } else {
+        loadQuery(DEFAULT_QUERY);
+      }
+    }
   </script>
 </body>
 </html>

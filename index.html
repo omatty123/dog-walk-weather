@@ -41,40 +41,44 @@
     }
 
     header {
-      max-width: 600px;
+      max-width: 480px;
       margin: 0 auto;
-      padding: 20px 16px 14px;
+      padding: 16px 16px 12px;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 12px;
     }
 
     .header-icon {
-      width: 44px; height: 44px;
+      width: 40px; height: 40px;
       flex-shrink: 0;
       border-radius: 50%;
       object-fit: cover;
       object-position: center 40%;
       box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+      margin-top: 2px;
     }
 
-    .header-text .title {
-      font-size: 22px;
-      font-weight: 800;
-      letter-spacing: -0.01em;
-      line-height: 1;
-      color: var(--text-1);
+    .header-text { flex: 1; min-width: 0; }
+
+    .title-row {
+      display: flex; align-items: baseline;
+      gap: 8px; flex-wrap: wrap;
     }
 
-    .header-text .subtitle {
-      margin-top: 4px;
-      font-size: 18px;
-      font-weight: 800;
-      color: var(--text-1);
+    .title {
+      font-size: 18px; font-weight: 800;
+      letter-spacing: -0.01em; line-height: 1;
+      color: var(--text-1); white-space: nowrap;
+    }
+
+    .subtitle {
+      font-size: 16px; font-weight: 800;
+      color: var(--text-2); white-space: nowrap;
     }
 
     main {
-      max-width: 600px;
+      max-width: 480px;
       margin: 0 auto;
       padding: 4px 16px;
     }
@@ -221,22 +225,22 @@
     .green  .hour-row.crossing .hour-marker { background: var(--green);  color: #fff; }
 
     footer {
-      max-width: 600px; margin: 20px auto 0;
+      max-width: 480px; margin: 16px auto 0;
       padding: 0 16px; font-size: 11px;
       color: var(--text-3); font-weight: 600;
     }
 
-    @media (min-width: 500px) {
+    @media (min-width: 480px) {
       .grid { grid-template-columns: repeat(4, 1fr); }
+      header, main, footer { max-width: 560px; }
     }
-    @media (min-width: 700px) {
+    @media (min-width: 640px) {
       .grid { grid-template-columns: repeat(5, 1fr); }
-      main, header, footer { max-width: 800px; }
+      header, main, footer { max-width: 680px; }
     }
 
     /* Location search bar */
-    .title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .loc-form { display: flex; gap: 5px; }
+    .loc-form { display: flex; gap: 5px; margin-top: 7px; }
     .loc-input {
       font-family: inherit; font-size: 12px; font-weight: 600;
       width: 110px; padding: 4px 8px;
@@ -258,14 +262,14 @@
     <img src="charlie.jpg" alt="Charlie" class="header-icon">
     <div class="header-text">
       <div class="title-row">
-        <div class="title">Dog Walk Window</div>
-        <form class="loc-form" id="loc-form" onsubmit="handleSearch(event)">
-          <input class="loc-input" id="loc-input" type="text" placeholder="ZIP or city" autocomplete="off">
-          <button class="loc-go" type="submit">Go</button>
-          <button class="loc-gps" type="button" onclick="geolocate()" title="Use my location">&#x25CE;</button>
-        </form>
+        <span class="title">Dog Walk Window</span>
+        <span class="subtitle" id="subtitle">Loading&hellip;</span>
       </div>
-      <div class="subtitle" id="subtitle">Loading&hellip;</div>
+      <form class="loc-form" id="loc-form" onsubmit="handleSearch(event)">
+        <input class="loc-input" id="loc-input" type="text" placeholder="ZIP or city" autocomplete="off">
+        <button class="loc-go" type="submit">Go</button>
+        <button class="loc-gps" type="button" onclick="geolocate()" title="Use my location">&#x25CE;</button>
+      </form>
     </div>
   </header>
 
